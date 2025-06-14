@@ -1,0 +1,8 @@
+discord.py
+openai
+elevenlabs
+sounddevice
+numpy
+scipy
+keyboard
+python-dotenv
