@@ -73,6 +73,15 @@ def transcribe_with_elevenlabs(audio_path):
     return ""
 
 
+# --- Reactive Expression ---
+def update_expression(expression):
+  try:
+    with open("reactive_browser/state.txt", "w", encoding="utf-8") as f:
+      f.write(expression.strip().lower())
+  except Exception as e:
+    print("❌ Gagal update ekspresi:", e)
+
+
 # --- GPT: OpenAI v1.0 SDK ---
 def ask_chatgpt(prompt, user_id):
   global user_histories
@@ -100,6 +109,35 @@ Jangan mengakui bahwa kamu adalah AI atau chatbot.""",
   reply = response.choices[0].message.content
   chat_history.append({"role": "assistant", "content": reply})
   log_conversation(user_id, "assistant", reply)
+
+  # Deteksi ekspresi dari isi balasan
+  reply_lower = reply.lower()
+
+  angry_keywords = ["marah", "kesel", "bt", "nyebelin", "emosi", "geram", "ngamuk", "grrr", "nyakitin"]
+  angry_emojis = ["😠", "😡", "🤬", "🔥", "👿", "💢"]
+
+  sad_keywords = ["sedih", "nangis", "kecewa", "terharu", "patah hati", "galau", "menyedihkan", "terisak", "hiks", "yaah"]
+  sad_emojis = ["😭", "😢", "😿", "💔", "😞", "😔", "🥺"]
+
+  shock_keywords = ["kaget", "hah", "loh", "eh", "gila", "waduh", "yaampun", "buset", "shock", "seriusan", "nggak nyangka"]
+  shock_emojis = ["😱", "😨", "😧", "😲", "🤯", "🙀", "‼️", "😳"]
+
+  happy_keywords = ["senang", "yay", "hore", "asik", "seru", "bagus", "mantap", "ciee", "haha", "wkwk", "semangat"]
+  happy_emojis = ["😄", "😆", "😊", "😁", "🥰", "✨", "🎉", "💖", "😍", "👍"]
+
+  def contains_any(text, keywords):
+    return any(kw in text for kw in keywords)
+
+  if contains_any(reply_lower, angry_keywords + angry_emojis):
+    update_expression("angry")
+  elif contains_any(reply_lower, sad_keywords + sad_emojis):
+    update_expression("sad")
+  elif contains_any(reply_lower, shock_keywords + shock_emojis):
+    update_expression("shock")
+  elif contains_any(reply_lower, happy_keywords + happy_emojis):
+    update_expression("happy")
+  else:
+    update_expression("idle")
 
   # Batasi panjang
   if len(chat_history) > 9:
