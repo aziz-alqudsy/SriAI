@@ -8,6 +8,7 @@ import time
 import numpy as np
 import sounddevice as sd
 import scipy.io.wavfile as wav
+from datetime import datetime
 from discord import FFmpegPCMAudio
 from dotenv import load_dotenv
 from openai import OpenAI
