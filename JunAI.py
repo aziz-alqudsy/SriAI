@@ -32,22 +32,26 @@ vc = None
 user_histories = {}
 
 # --- Rekam suara ke WAV ---
-def record_audio_while_key_pressed(filename="temp.wav", fs=44100, key='esc'):
-    print("🎙️ Rekaman dimulai (selama tombol ditekan)...")
+def record_audio_until_toggle(filename="temp.wav", fs=44100):
+    print("🎙️ Rekaman dimulai (tekan DECIMAL lagi untuk selesai)...")
     frames = []
 
     def callback(indata, frames_count, time_info, status):
         frames.append(indata.copy())
 
     with sd.InputStream(samplerate=fs, channels=1, callback=callback):
-        while keyboard.is_pressed(key):
+        while True:
+            if keyboard.is_pressed('decimal'):
+                time.sleep(0.3)  # debounce
+                break
             time.sleep(0.05)
 
-    print("🛑 Tombol dilepas, rekaman selesai.")
+    if not frames:
+        print("⚠️ Tidak ada data audio.")
+        return
 
     audio_np = np.concatenate(frames, axis=0)
     wav.write(filename, fs, audio_np)
-
 
 # --- STT: ElevenLabs ---
 def transcribe_with_elevenlabs(audio_path):
@@ -139,49 +143,52 @@ def generate_tts(text):
 async def on_ready():
     print(f"✅ Bot {bot.user} aktif.")
     print("➡️ Tekan [1] supaya bot join voice channel")
-    print("➡️ Tekan [Escape] untuk bicara dan tunggu balasan")
+    print("➡️ Tekan [decimal] untuk bicara dan tunggu balasan")
+
+recording = False
 
 async def input_loop():
-    global vc
+    global vc, recording
     loop = asyncio.get_event_loop()
 
-    def handle_key_event():
+    while True:
+        await asyncio.sleep(0.1)
+
+        # Tekan 1 → bot join voice
         if keyboard.is_pressed('1'):
             for guild in bot.guilds:
                 for member in guild.members:
                     if member.id != bot.user.id and member.voice and member.voice.channel:
-                        return ('join', member.voice.channel)
-        elif keyboard.is_pressed('esc'):
-            return ('talk', None)
-        return (None, None)
+                        if not vc or not vc.is_connected():
+                            vc = await member.voice.channel.connect()
+                            print(f"📥 Bot masuk ke voice channel: {member.voice.channel.name}")
 
-    while True:
-        await asyncio.sleep(0.2)
-        action, data = await loop.run_in_executor(None, handle_key_event)
-        if action == 'join':
-            if not vc or not vc.is_connected():
-                vc = await data.connect()
-                print("📥 Bot masuk ke voice channel:", data.name)
-        elif action == 'talk':
-            print("⏺ Tombol Escape ditekan")
-            try:
-                await asyncio.to_thread(record_audio_while_key_pressed, "temp.wav")
-                print("📤 Mengirim ke ElevenLabs STT...")
-                text = await asyncio.to_thread(transcribe_with_elevenlabs, "temp.wav")
-                print("📝 Transkrip:", text)
-                if not text.strip():
-                    continue
-                user_id = "local_user"
-                reply = await asyncio.to_thread(ask_chatgpt, text, user_id)
-                print("🤖 GPT Balas:", reply)
-                mp3 = await asyncio.to_thread(generate_tts, reply)
-                if mp3 and vc:
-                    print("🔊 Memutar suara ke VC...")
-                    vc.play(FFmpegPCMAudio(mp3))
-                    while vc.is_playing():
-                        await asyncio.sleep(0.5)
-            except Exception as e:
-                print("❌ ERROR saat proses rekaman/balas:", e)
+        # Toggle rekaman dengan DECIMAL
+        elif keyboard.is_pressed('decimal'):
+            await asyncio.sleep(0.2)
+            recording = not recording
+
+            if recording:
+                print("⏺️ Mulai merekam...")
+                await asyncio.to_thread(record_audio_until_toggle, "temp.wav")
+                recording = False
+                print("🛑 Rekaman selesai. Proses STT...")
+
+                try:
+                    text = await asyncio.to_thread(transcribe_with_elevenlabs, "temp.wav")
+                    print("📝 Transkrip:", text)
+                    if not text.strip():
+                        continue
+                    reply = await asyncio.to_thread(ask_chatgpt, text, "local_user")
+                    print("🤖 GPT Balas:", reply)
+                    mp3 = await asyncio.to_thread(generate_tts, reply)
+                    if mp3 and vc:
+                        print("🔊 Memutar ke VC...")
+                        vc.play(FFmpegPCMAudio(mp3))
+                        while vc.is_playing():
+                            await asyncio.sleep(0.5)
+                except Exception as e:
+                    print("❌ ERROR saat proses:", e)
 
 @bot.event
 async def on_connect():
