@@ -103,8 +103,9 @@ if not os.path.exists("logs"):
 
 def log_conversation(user_id, role, content):
     log_file = f"logs/{user_id}.txt"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(log_file, "a", encoding="utf-8") as f:
-        f.write(f"[{role.upper()}] {content}\n")
+        f.write(f"[{timestamp}] [{role.upper()}] {content.strip()}\n")
 
 # --- TTS: ElevenLabs ---
 def generate_tts(text):
