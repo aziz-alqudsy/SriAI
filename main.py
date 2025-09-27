@@ -14,8 +14,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # Privileged intent - enable in Discord Developer Portal
 intents.voice_states = True
+intents.guilds = True
 
 class StreamAIBot(commands.Bot):
     def __init__(self):
@@ -32,10 +33,19 @@ class StreamAIBot(commands.Bot):
         if member == self.user:
             return
 
-        if after.channel and after.channel.name == os.getenv('VOICE_CHANNEL_NAME', 'Sri-Voice'):
-            await self.voice_handler.handle_user_join(member, after.channel)
-        elif before.channel and before.channel.name == os.getenv('VOICE_CHANNEL_NAME', 'Sri-Voice'):
-            await self.voice_handler.handle_user_leave(member, before.channel)
+        target_channel_name = os.getenv('VOICE_CHANNEL_NAME', 'Sri-Voice')
+
+        # User joined the target channel
+        if after.channel and after.channel.name == target_channel_name:
+            if not before.channel or before.channel.name != target_channel_name:
+                # Only handle if they actually joined (not moved within same channel)
+                await self.voice_handler.handle_user_join(member, after.channel)
+
+        # User left the target channel
+        elif before.channel and before.channel.name == target_channel_name:
+            if not after.channel or after.channel.name != target_channel_name:
+                # Only handle if they actually left (not moved within same channel)
+                await self.voice_handler.handle_user_leave(member, before.channel)
 
 bot = StreamAIBot()
 
