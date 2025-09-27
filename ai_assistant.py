@@ -14,7 +14,7 @@ class AIAssistant:
             return
 
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
 
         # Track current game context
         self.current_game = None
@@ -113,6 +113,9 @@ class AIAssistant:
         try:
             if not self.api_key:
                 return "Kak, aku belum dikonfigurasi dengan benar. Tolong cek API key-ku ya."
+
+            if not self.model:
+                return "Kak, ada masalah dengan model AI-ku. Tolong cek konfigurasi Gemini API."
 
             # Detect if user mentions a new game
             detected_game = self.detect_game_mention(message)
