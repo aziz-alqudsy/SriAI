@@ -1,236 +1,280 @@
-# Sri - AI Adik Perempuan untuk YouTube Streaming
+# SriAI - AI Adik Perempuan untuk Streaming & Gaming
 
-Kenalan sama Sri, adik perempuan AI yang manis dan membantu streaming YouTube! Dia berkomunikasi melalui Discord voice channel dan hanya merespons ketika dipanggil namanya. Menggunakan solusi open-source untuk meminimalkan biaya.
+Kenalan sama Sri, adik perempuan AI yang manis dan cerdas yang siap menemani streaming dan gaming kamu! Dia berbicara Bahasa Indonesia dengan natural dan hanya merespons ketika dipanggil namanya - hemat biaya API!
 
-## Features
+## ✨ Fitur Utama
 
-- 🎤 **Speech-to-Text**: Uses OpenAI Whisper (free, runs locally)
-- 🔊 **Text-to-Speech**: Uses pyttsx3 (free, cross-platform)
-- 🤖 **AI Conversation**: Google Gemini API (free tier: 15 RPM, 1M tokens/day)
-- 📺 **YouTube Streaming**: Audio streaming via FFmpeg
-- 🎮 **Discord Integration**: Voice channel support
-- 💰 **Minimal Cost**: Designed to use free tiers and open-source tools
+### 🎤 **Voice-to-Voice Conversation**
+- **Local Voice Input**: Dengar suara kamu via microphone komputer (gratis!)
+- **Smart Name Recognition**: Hanya merespons ketika dipanggil "Sri"
+- **Local TTS Output**: Sri bicara via speaker komputer (Windows SAPI)
+- **Anti-Duplicate**: Tidak ada echo atau duplikasi suara
 
-## Quick Start
+### 🤖 **AI Yang Cerdas**
+- **Gemini 2.5 Flash**: AI model terbaru dari Google (gratis 15 RPM)
+- **Game Context Aware**: Sri tahu game apa yang kamu main
+- **Personality**: Adik perempuan yang supportive dan ceria
+- **Indonesian Native**: 100% berbahasa Indonesia natural
+
+### 🎮 **Perfect untuk Gaming & Streaming**
+- **OBS Ready**: Voice conversation terekam perfect di OBS
+- **Gaming Commands**: Sri bisa kasih tips dan support saat gaming
+- **Stream Interaction**: Bantu manage audience dan chat
+- **Background Process**: Tidak mengganggu performance game
+
+### 📺 **Discord Integration**
+- **Auto Join/Leave**: Ikut masuk/keluar voice channel otomatis
+- **Text Backup**: Response juga muncul di chat Discord
+- **Smart Commands**: `!join`, `!leave`, `!shutdown`
+- **Proper Cleanup**: Tidak ada background process zombie
+
+## 🚀 Instalasi & Setup
 
 ### 1. Prerequisites
-
-- Python 3.8+
-- FFmpeg installed and in PATH
-- Discord Bot Token
-- Google Gemini API Key (free at https://makersuite.google.com/app/apikey)
-- YouTube Stream Key
-
-### 2. Installation
-
 ```bash
-# Clone or download the project
-git clone <your-repo-url>
+# Windows 10/11
+Python 3.8+
+Git (optional)
+```
+
+### 2. Download & Install
+```bash
+# Clone repository
+git clone https://github.com/your-username/SriAI.git
 cd SriAI
 
 # Install dependencies
 pip install -r requirements.txt
+```
 
-# Copy environment file
+### 3. Setup API Keys
+
+**Discord Bot:**
+1. Buka https://discord.com/developers/applications
+2. Create New Application → Bot
+3. Copy Bot Token
+4. Enable "Message Content Intent" & "Server Members Intent"
+
+**Google Gemini:**
+1. Buka https://makersuite.google.com/app/apikey
+2. Create API Key (gratis!)
+
+### 4. Konfigurasi .env
+```bash
+# Copy template
 cp .env.example .env
 ```
 
-### 3. Configuration
-
-Edit `.env` file with your credentials:
-
+Edit `.env`:
 ```env
-DISCORD_TOKEN=your_discord_bot_token_here
-GEMINI_API_KEY=your_gemini_api_key_here
-YOUTUBE_STREAM_KEY=your_youtube_stream_key_here
-YOUTUBE_RTMP_URL=rtmp://a.rtmp.youtube.com/live2/
-BOT_NAME=Sri
-VOICE_CHANNEL_NAME=Sri-Voice
-MAIN_USER=your_discord_username_here
+DISCORD_TOKEN=your_discord_bot_token
+GEMINI_API_KEY=your_gemini_api_key
+MAIN_USER=your_discord_username  # PENTING: nama Discord kamu
+VOICE_CHANNEL_NAME=Sri-Voice     # nama voice channel
 ```
 
-### 4. Discord Bot Setup
-
-1. Go to https://discord.com/developers/applications
-2. Create a New Application
-3. Go to "Bot" section
-4. Create a Bot
-5. Copy the Token to your `.env` file
-6. Enable these Privileged Gateway Intents:
-   - Message Content Intent
-   - Server Members Intent (optional)
-
-### 5. Discord Bot Permissions
-
-Invite your bot with these permissions:
+### 5. Invite Bot ke Server
+Permissions yang dibutuhkan:
+- Send Messages
+- View Channels
 - Connect (Voice)
 - Speak (Voice)
 - Use Voice Activity
-- Send Messages
-- View Channels
 
-Invite URL format:
+URL invite:
 ```
 https://discord.com/api/oauth2/authorize?client_id=YOUR_BOT_ID&permissions=36703232&scope=bot
 ```
 
-### 6. YouTube Setup
-
-1. Go to YouTube Studio
-2. Click "Go Live"
-3. Select "Stream" option
-4. Copy your Stream Key to `.env`
-
-### 7. Run the Bot
-
+### 6. Jalankan Bot
 ```bash
 python main.py
 ```
 
-## Usage
-
-### Discord Commands
-
-- `!join` - Join your current voice channel
-- `!leave` - Leave the voice channel
-- `!start_stream` - Start YouTube streaming
-- `!stop_stream` - Stop YouTube streaming
+## 🎮 Cara Menggunakan
 
 ### Voice Interaction
+1. **Join voice channel** yang sudah dikonfigurasi (default: "Sri-Voice")
+2. **Ketik `!join`** di text channel untuk mengaktifkan Sri
+3. **Bicara dengan memanggil "Sri"**: "Halo Sri", "Sri gimana?", dll
+4. **Sri akan merespons** via speaker dan text chat
 
-1. Join ke voice channel yang sudah dikonfigurasi (default: "Sri-Voice")
-2. Sri akan otomatis join ketika kamu join
-3. Panggil "Sri" atau tanya langsung - dia akan transcribe dan merespons sebagai adik perempuanmu
-4. Dia manggil kamu "Kak" dan berbicara dalam Bahasa Indonesia melalui Discord
-5. Sri hanya merespons ketika dipanggil nama atau langsung ditanya
+### Smart Response System
+✅ **Sri AKAN merespons:**
+- "Halo Sri selamat malam"
+- "Sri, apa kabar?"
+- "Sri gimana gamenya?"
+- "Maju Sri" (saat gaming)
 
-**Contoh Percakapan:**
-- "Sri, apa kabar?" → "Halo Kak! Aku baik-baik aja nih!"
-- "Sri, game apa yang bagus buat di-stream?" → "Kakak bisa coba game yang lagi trending!"
-- "Sri, gimana stream hari ini?" → "Kakak udah siap banget! Aku excited nih!"
+❌ **Sri TIDAK akan merespons:**
+- "kanan kanan" (gaming callout tanpa nama)
+- "oke let's go" (general chat)
+- "mundur-mundur" (directional commands)
 
-**Aturan Panggilan Sri:**
-- **"Kak"** - untuk menyapa atau memanggil: "Halo Kak!", "Iya Kak"
-- **"Kakak"** - ketika menyebut sebagai subjek: "Kakak bisa coba ini", "Kakak lagi ngapain?"
+### Gaming Integration
+```
+🎮 Gaming Commands yang Dipahami Sri:
+- "Sri maju" → Sri kasih support
+- "Sri gimana nih?" → Sri kasih analysis
+- "Sri help" → Sri kasih tips
+- Game context otomatis terdeteksi (Valorant, PUBG, dll)
+```
 
-### Streaming
+### Discord Commands
+```bash
+!join      # Aktifkan voice-to-voice mode
+!leave     # Stop voice listening (bot masih aktif)
+!shutdown  # Matikan bot sepenuhnya
+```
 
-- Use `!start_stream` to begin streaming audio to YouTube
-- Audio from Discord voice channel will be streamed
-- Use `!stop_stream` to end the stream
+### OBS Recording Setup
+1. **Desktop Audio**: ON (untuk suara Sri + game)
+2. **Microphone**: ON (untuk suara kamu)
+3. **Result**: Perfect voice conversation recording!
 
-## Cost Breakdown
+## 🔧 Troubleshooting
 
-### Free Components:
-- **OpenAI Whisper**: Free, runs locally
-- **pyttsx3**: Free text-to-speech engine
-- **Discord Bot**: Free
-- **FFmpeg**: Free, open-source
-- **YouTube Streaming**: Free
+### Masalah Voice Input
+**"Sri tidak dengar suara saya"**
+- Cek microphone permissions Windows
+- Pastikan tidak ada aplikasi lain yang gunakan mic
+- Test dengan Windows Voice Recorder
 
-### API Costs:
-- **Google Gemini**: Free tier (15 requests/minute, 1M tokens/day)
-- After free tier: ~$1-3/month for moderate usage
+**"Voice recognition tidak akurat"**
+- Bicara lebih jelas dan pelan
+- Kurangi background noise
+- Pastikan mic dekat dengan mulut
 
-**Total Monthly Cost: $0-3** depending on usage
+### Masalah AI Response
+**"Sri bilang [nama streamer] bukan nama saya"**
+- Set `MAIN_USER=nama_discord_kamu` di file `.env`
+- Restart bot: `!shutdown` lalu jalankan lagi
 
-## Troubleshooting
+**"Sri merespons semua yang saya bilang"**
+- Sudah diperbaiki! Sri sekarang hanya merespons saat dipanggil nama
 
-### Audio Issues
+### Masalah Discord
+**"Bot tidak bisa join voice channel"**
+- Cek bot permissions (Connect + Speak)
+- Pastikan `VOICE_CHANNEL_NAME` benar di `.env`
+- Coba invite ulang bot dengan permissions lengkap
 
-1. **No desktop audio in stream**:
-   - Enable "Stereo Mix" in Windows Sound settings
-   - Or use microphone-only mode
+## 💡 Tips & Best Practices
 
-2. **Poor voice recognition**:
-   - Ensure clear audio input
-   - Check Discord voice settings
-   - Reduce background noise
+### Untuk Gaming
+- Panggil Sri saat butuh support: "Sri gimana nih?"
+- Gunakan untuk callout penting: "Sri enemy kanan"
+- Sri bisa kasih motivasi saat kalah: "Sri semangatin dong"
 
-3. **TTS not working**:
-   - Check if pyttsx3 voices are installed
-   - Try different voice settings
+### Untuk Streaming
+- Sri bisa interaksi dengan chat viewers
+- Gunakan untuk fill dead air saat loading
+- Sri bisa kasih game tips untuk audience
 
-### Streaming Issues
+### Performance Optimization
+- Set Whisper model ke "base" (default) untuk balance speed/accuracy
+- Jika PC lemah, ganti ke "tiny" model di `voice_handler.py`
+- Close aplikasi berat saat voice conversation
 
-1. **Stream won't start**:
-   - Verify YouTube stream key
-   - Check FFmpeg installation
-   - Ensure audio devices are available
+## 📊 Cost Analysis
 
-2. **High bandwidth usage**:
-   - Use AudioOnlyStreamManager for lower bitrate
-   - Adjust audio quality settings in stream_manager.py
+### 100% Gratis:
+- ✅ Local voice recognition (Whisper)
+- ✅ Local text-to-speech (Windows SAPI)
+- ✅ Discord bot hosting
+- ✅ Basic functionality
 
-### Discord Issues
+### API Costs (Gemini):
+- **Free Tier**: 15 requests/menit, 1M token/hari
+- **Moderate Usage**: $0-2/bulan
+- **Heavy Usage**: $2-5/bulan
 
-1. **Bot can't join voice**:
-   - Check bot permissions
-   - Verify voice channel name in .env
-   - Ensure bot is in the server
+**Estimate: $0-5/bulan** (jauh lebih murah dari ChatGPT API!)
 
-## Advanced Configuration
+## 🛠 Advanced Configuration
 
-### Custom AI Personality
-
-Edit `ai_assistant.py` line 20-40 to customize the AI's personality:
-
+### Custom Personality
+Edit `ai_assistant.py` line 23-49:
 ```python
 self.system_prompt = """
-Your custom personality here...
+Kamu adalah Sri, adik perempuan AI...
+[custom personality here]
 """
 ```
 
-### Audio Quality Settings
+### Voice Model Settings
+Di `voice_handler.py` line 23:
+```python
+# Faster but less accurate
+self.whisper_model = whisper.load_model("tiny")
 
-In `stream_manager.py`, adjust bitrate and quality:
-- `-ab '128k'` - Audio bitrate (lower = less bandwidth)
-- `-ar '44100'` - Sample rate (22050 for lower quality)
+# Better accuracy but slower
+self.whisper_model = whisper.load_model("small")
+```
 
-### Voice Recognition Model
+### Gaming Context
+Sri otomatis deteksi game dari kata kunci:
+- "main valorant" → Context: Valorant
+- "buka dota" → Context: Dota 2
+- "pubg yuk" → Context: PUBG
 
-Change Whisper model in `voice_handler.py`:
-- `base` - Good balance (default)
-- `tiny` - Fastest, lower accuracy
-- `small` - Good for most uses
-- `medium` - Better accuracy, slower
-
-## File Structure
-
+## 📁 Project Structure
 ```
 SriAI/
-├── main.py              # Main bot application
-├── ai_assistant.py      # AI conversation handler
-├── voice_handler.py     # Speech-to-text & text-to-speech
-├── stream_manager.py    # YouTube streaming logic
-├── requirements.txt     # Python dependencies
-├── .env.example        # Environment template
-└── README.md           # This file
+├── main.py                 # Main application & Discord commands
+├── ai_assistant.py         # Gemini AI integration & personality
+├── voice_handler.py        # Voice input/output & conversation logic
+├── local_voice_listener.py # Local microphone handling
+├── local_tts.py           # Local text-to-speech
+├── stream_manager.py      # YouTube streaming (optional)
+├── requirements.txt       # Python dependencies
+├── .env.example          # Configuration template
+├── .gitignore            # Git ignore rules
+└── README.md             # This documentation
 ```
 
-## Contributing
+## 📈 Recent Updates
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+### v2.1.0 - Major Voice Improvements
+- ✅ **Fixed duplicate voice output**: Hanya 1 suara Sri (bukan 2)
+- ✅ **Smart name recognition**: Sri hanya merespons saat dipanggil
+- ✅ **Proper MAIN_USER support**: Sri panggil nama kamu dengan benar
+- ✅ **Better leave command**: `!leave` stop semua voice function
+- ✅ **New shutdown command**: `!shutdown` untuk exit bot sepenuhnya
+- ✅ **Conservative pattern matching**: Kurangi false positive responses
+- ✅ **OBS recording ready**: Perfect voice conversation recording
 
-## License
+### v2.0.0 - SriAI Complete Rewrite
+- 🎯 **Indonesian AI sister personality**
+- 🎤 **Local voice-to-voice conversation**
+- 🎮 **Gaming context awareness**
+- 📺 **OBS streaming integration**
 
-MIT License - Feel free to modify and distribute
+## 🤝 Contributing
 
-## Support
+1. Fork repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
-Untuk masalah dan pertanyaan:
-1. Cek bagian troubleshooting
-2. Review permissions Discord bot
-3. Pastikan semua API keys benar
-4. Cek instalasi FFmpeg
+## 📜 License
 
-## Changelog
+MIT License - Bebas dimodifikasi dan distribusi
 
-- **v1.0.0**: Initial SriAI release
-- Adik perempuan AI yang berbicara Bahasa Indonesia
-- Sistem panggilan "Kak" dan "Kakak"
-- Streaming YouTube dengan voice interaction
+## 🆘 Support & Community
+
+**Butuh bantuan?**
+1. Cek troubleshooting section di atas
+2. Baca dokumentasi dengan teliti
+3. Pastikan semua prerequisites terpenuhi
+4. Test dengan setup minimal dulu
+
+**Feature requests & bug reports:**
+- Open GitHub Issues
+- Sertakan log error lengkap
+- Jelaskan steps to reproduce
+
+---
+
+**🎉 Selamat menggunakan SriAI! Semoga Sri jadi teman gaming & streaming terbaik kamu!**
