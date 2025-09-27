@@ -16,6 +16,10 @@ class AIAssistant:
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel('gemini-pro')
 
+        # Track current game context
+        self.current_game = None
+        self.game_start_time = None
+
         self.system_prompt = """
         Kamu adalah Sri, adik perempuan AI yang manis dan ceria yang membantu dengan streaming YouTube. Kamu berkomunikasi melalui voice chat Discord.
 
@@ -68,10 +72,54 @@ class AIAssistant:
 
         return False
 
+    def detect_game_mention(self, message: str) -> Optional[str]:
+        """Detect if user mentions starting/playing a new game"""
+        message_lower = message.lower()
+
+        # Game starting phrases
+        game_indicators = [
+            "main", "playing", "mulai", "start", "buka", "open",
+            "game", "lagi main", "sekarang main", "mau main"
+        ]
+
+        # Common game keywords to help identify
+        game_keywords = [
+            "dota", "mobile legends", "pubg", "valorant", "minecraft",
+            "genshin", "honkai", "cod", "ff", "free fire", "chess",
+            "among us", "fall guys", "rocket league", "csgo", "cs2"
+        ]
+
+        for indicator in game_indicators:
+            if indicator in message_lower:
+                # Try to extract game name from the message
+                words = message_lower.split()
+                try:
+                    indicator_index = words.index(indicator.split()[-1])
+                    # Look for game name in next few words
+                    potential_game = " ".join(words[indicator_index+1:indicator_index+4])
+                    if potential_game and len(potential_game.strip()) > 0:
+                        return potential_game.strip()
+                except (ValueError, IndexError):
+                    pass
+
+                # Check for known game keywords
+                for keyword in game_keywords:
+                    if keyword in message_lower:
+                        return keyword
+
+        return None
+
     async def process_message(self, message: str, username: str) -> Optional[str]:
         try:
             if not self.api_key:
                 return "Kak, aku belum dikonfigurasi dengan benar. Tolong cek API key-ku ya."
+
+            # Detect if user mentions a new game
+            detected_game = self.detect_game_mention(message)
+            if detected_game:
+                self.current_game = detected_game
+                self.game_start_time = datetime.now()
+                logger.info(f"Game context updated: {detected_game}")
 
             # Check if Sri should respond to this message
             if not self.should_respond(message):
@@ -106,7 +154,12 @@ class AIAssistant:
             # Special handling for the main user (assume first user or configure later)
             user_title = "Kak" if self.is_main_user(username) else username
 
-            full_prompt = f"{self.system_prompt}\n\nPercakapan terakhir:\n{context}\n\nOrang yang bicara adalah {user_title}. Respons sebagai Sri untuk: {message}"
+            # Add current game context to prompt
+            game_context = ""
+            if self.current_game:
+                game_context = f"\n\nKONTEKS GAME SAAT INI: {user_title} sedang main {self.current_game}. Sri tahu tentang game ini dan bisa ngobrol tentang game ini dengan antusias."
+
+            full_prompt = f"{self.system_prompt}\n\nPercakapan terakhir:\n{context}{game_context}\n\nOrang yang bicara adalah {user_title}. Respons sebagai Sri untuk: {message}"
 
             # Generate response
             response = self.model.generate_content(full_prompt)
