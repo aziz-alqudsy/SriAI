@@ -32,9 +32,9 @@ class LocalVoiceListener:
                 logger.info(f"Post-adjustment energy threshold: {self.recognizer.energy_threshold}")
 
             # Enhanced recognizer settings for better accuracy
-            self.recognizer.energy_threshold = 200  # Higher threshold to avoid picking up TTS echo
+            self.recognizer.energy_threshold = 300  # Higher threshold to avoid picking up TTS echo
             self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.pause_threshold = 1.0  # Longer pause to capture full sentences
+            self.recognizer.pause_threshold = 10  # Longer pause to capture full sentences
             self.recognizer.operation_timeout = None  # No operation timeout
 
             logger.info(f"Microphone energy threshold: {self.recognizer.energy_threshold}")
