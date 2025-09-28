@@ -12,9 +12,9 @@ import os
 import pyttsx3
 import threading
 from queue import Queue
-from local_voice_listener import LocalVoiceListener
 from local_tts import LocalTTS
 from elevenlabs_tts import ElevenLabsTTS
+from push_to_talk import PushToTalkListener
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +27,13 @@ class VoiceHandler:
         self.is_recording = False
         self.voice_client: Optional[discord.VoiceClient] = None
 
-        # Initialize local voice listener
-        self.local_voice_listener = LocalVoiceListener(self._process_voice_input)
+        # Push-to-talk only system
+        self.push_to_talk = PushToTalkListener(self._process_push_to_talk_input, None)
 
         # Store the channel where voice input was activated
         self.voice_input_channel = None
+
+        logger.info("SriAI configured for push-to-talk only mode")
 
         # Initialize TTS systems (ElevenLabs primary, Local TTS fallback)
         self.elevenlabs_tts = ElevenLabsTTS()
@@ -47,15 +49,7 @@ class VoiceHandler:
             self.fallback_tts = None
             logger.warning("⚠ ElevenLabs not available, using Local TTS only")
 
-        # Track recent voice conversation for context awareness
-        self.last_voice_interaction_time = 0
-        self.voice_context_timeout = 30  # 30 seconds context window
-
-        # Track recent voice inputs to avoid duplicates
-        self.recent_voice_inputs = []
-        self.voice_input_timeout = 3  # 3 seconds to consider as duplicate
-
-        # Track when Sri is speaking to pause voice input
+        # Track when Sri is speaking for TTS management
         self.sri_is_speaking = False
 
         # Configure TTS
@@ -68,8 +62,7 @@ class VoiceHandler:
         self.tts_thread = threading.Thread(target=self._tts_worker, daemon=True)
         self.tts_thread.start()
 
-        # Start voice queue processor
-        self._start_voice_queue_processor()
+        # Voice processing handled by push-to-talk directly
 
     def _tts_worker(self):
         while True:
@@ -162,22 +155,24 @@ class VoiceHandler:
         if channel:
             self.voice_input_channel = channel
 
-        # Try local voice listener first
-        if self.local_voice_listener.is_available():
-            success = self.local_voice_listener.start_listening()
+        # Start push-to-talk system
+        if self.push_to_talk.is_available():
+            success = self.push_to_talk.start_listening()
             if success:
-                logger.info("Started local voice listening - you can now speak to Sri!")
+                ptt_config = self.push_to_talk.get_config_info()
+                logger.info(f"🎤 Push-to-talk activated - Hold [{ptt_config['talk_key']}] key while speaking!")
                 return
             else:
-                logger.warning("Failed to start local voice listening")
+                logger.warning("Failed to start push-to-talk system")
+        else:
+            logger.error("Push-to-talk system not available")
 
-        # Fallback message
         logger.info("Voice input not available - Sri will respond to your text messages with voice")
 
     async def stop_listening(self):
-        # Stop local voice listener
-        if self.local_voice_listener:
-            self.local_voice_listener.stop_listening()
+        # Stop push-to-talk system
+        if self.push_to_talk:
+            self.push_to_talk.stop_listening()
 
         # Stop Discord voice recording (if any)
         if self.voice_client and self.is_recording:
@@ -188,64 +183,48 @@ class VoiceHandler:
             except Exception as e:
                 logger.error(f"Failed to stop recording: {e}")
 
-    async def _process_voice_input(self, text: str):
-        """Process voice input from local microphone"""
+
+    def _process_push_to_talk_input(self, text: str):
+        """Process voice input from push-to-talk system (synchronous version)"""
         try:
-            logger.info(f"Processing voice input: {text}")
+            # Get the bot's event loop (main loop) and schedule the async task
+            loop = self.bot.loop
+            if loop and loop.is_running():
+                # Schedule the coroutine to run on the main event loop
+                asyncio.run_coroutine_threadsafe(
+                    self._process_push_to_talk_input_async(text),
+                    loop
+                )
+            else:
+                logger.error("Bot event loop not available for push-to-talk processing")
+        except Exception as e:
+            logger.error(f"Error scheduling push-to-talk task: {e}")
 
-            # Check for duplicate voice input
-            import time
-            current_time = time.time()
-
-            # Clean old voice inputs
-            self.recent_voice_inputs = [
-                (msg, timestamp) for msg, timestamp in self.recent_voice_inputs
-                if current_time - timestamp < self.voice_input_timeout
-            ]
-
-            # Check if this input was recently processed
-            text_lower = text.lower().strip()
-            for recent_input, timestamp in self.recent_voice_inputs:
-                if text_lower == recent_input.lower().strip():
-                    logger.info(f"Skipping duplicate voice input: {text}")
-                    return
-
-            # Add this input to recent list
-            self.recent_voice_inputs.append((text, current_time))
+    async def _process_push_to_talk_input_async(self, text: str):
+        """Process voice input from push-to-talk system"""
+        try:
+            logger.info(f"Processing push-to-talk input: {text}")
 
             # Get user name from MAIN_USER environment variable
             import os
             username = os.getenv('MAIN_USER', 'User')
 
-            # Check if we're in a voice conversation context
-            in_voice_context = (current_time - self.last_voice_interaction_time) < self.voice_context_timeout
-
-            # For voice input, only respond if Sri is explicitly mentioned
-            # Don't override should_respond - use the original logic
-            # This ensures Sri only responds when her name is called, even for voice input
-
-            # Process through AI assistant
-            response = await self.bot.ai_assistant.process_message(text, username)
-
-            # Update last interaction time if Sri responded
-            if response:
-                self.last_voice_interaction_time = current_time
-
-                # Mark this voice input as processed to avoid duplicate text response
-                import time
-                self.bot.recent_voice_responses.append((text, time.time()))
+            # For push-to-talk, always process the input (no need to check for "Sri" mention)
+            # since user intentionally pressed the button to talk
+            logger.info(f"Calling AI assistant with text: '{text}' from user: '{username}'")
+            response = await self.bot.ai_assistant.process_message(text, username, force_respond=True)
+            logger.info(f"AI assistant response: {response}")
 
             if response:
-                logger.info(f"Sri responding to voice: {response}")
+                logger.info(f"Sri responding to push-to-talk: {response}")
 
                 # Send text response to Discord
                 try:
                     target_channel = None
 
-                    # First, try to use the stored channel where voice input was activated
+                    # Use stored voice input channel
                     if self.voice_input_channel and hasattr(self.voice_input_channel, 'send'):
                         target_channel = self.voice_input_channel
-                        logger.info(f"Using stored voice input channel: {target_channel.name}")
                     else:
                         # Fallback: Find any available channel
                         for guild in self.bot.guilds:
@@ -257,69 +236,23 @@ class VoiceHandler:
                                 break
 
                     if target_channel:
-                        await target_channel.send(f"🎤 **Voice input detected:** {text}\n\n{response}")
-                        logger.info(f"Sent voice response to channel: {target_channel.name}")
-                    else:
-                        logger.warning("No available channel to send voice response")
+                        await target_channel.send(f"🎙️ **Push-to-talk:** {text}\n\n{response}")
+                        logger.info(f"Sent push-to-talk response to channel: {target_channel.name}")
 
                 except Exception as e:
-                    logger.error(f"Failed to send voice response to Discord: {e}")
+                    logger.error(f"Failed to send push-to-talk response to Discord: {e}")
 
-                # Use ElevenLabs TTS with Local TTS fallback
+                # Use TTS for voice response
                 try:
                     success = await self._speak_with_fallback(response)
                     if not success:
-                        logger.warning("Both ElevenLabs and Local TTS failed for voice response")
+                        logger.warning("Both ElevenLabs and Local TTS failed for push-to-talk response")
                 except Exception as e:
-                    logger.error(f"Error with TTS system: {e}")
+                    logger.error(f"Error with TTS system for push-to-talk: {e}")
 
         except Exception as e:
-            logger.error(f"Error processing voice input: {e}")
+            logger.error(f"Error processing push-to-talk input: {e}")
 
-    def _start_voice_queue_processor(self):
-        """Start background task to process voice queue"""
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._voice_queue_processor())
-
-    async def _resume_voice_listening_after_speech(self, response_text: str):
-        """Resume voice listening after Sri finishes speaking"""
-        try:
-            # Estimate speech duration (more conservative: 120 words per minute, 5 chars per word)
-            char_count = len(response_text)
-            estimated_duration = max(3, char_count / (120 * 5 / 60))  # minimum 3 seconds
-
-            logger.info(f"Estimated speech duration: {estimated_duration:.1f} seconds")
-            await asyncio.sleep(estimated_duration + 2)  # Add 2 second buffer
-
-            self.sri_is_speaking = False
-            # Resume voice listening with fresh timeout
-            if self.local_voice_listener:
-                self.local_voice_listener.resume_listening()
-            logger.info("Resumed voice listening with fresh timeout - Sri finished speaking")
-        except Exception as e:
-            logger.error(f"Error in resume voice listening: {e}")
-            self.sri_is_speaking = False  # Failsafe
-
-    async def _voice_queue_processor(self):
-        """Process voice input from queue"""
-        while True:
-            try:
-                # Check for voice input every 100ms
-                await asyncio.sleep(0.1)
-
-                # Skip processing if Sri is currently speaking
-                if self.sri_is_speaking:
-                    # Voice listener is paused, so no need to drain queue
-                    continue
-
-                if self.local_voice_listener:
-                    voice_input = self.local_voice_listener.get_voice_input()
-                    if voice_input:
-                        await self._process_voice_input(voice_input)
-
-            except Exception as e:
-                logger.error(f"Error in voice queue processor: {e}")
-                await asyncio.sleep(1)
 
     def _recording_finished(self, sink, channel, *args):
         asyncio.create_task(self._process_recordings(sink, channel))
@@ -366,10 +299,8 @@ class VoiceHandler:
         """Speak text using primary TTS (ElevenLabs) with fallback to Local TTS"""
         logger.info(f"🎤 TTS: {text[:50]}...")
 
-        # Pause voice listening while speaking
+        # Mark as speaking for TTS management
         self.sri_is_speaking = True
-        if self.local_voice_listener:
-            self.local_voice_listener.pause_listening()
 
         success = False
 
@@ -387,7 +318,7 @@ class VoiceHandler:
 
         except Exception as e:
             logger.error(f"ElevenLabs TTS error: {e}")
-            success = False  # Ensure success is False when exception occurs
+            success = False
 
         # Try fallback if primary failed
         if not success and self.fallback_tts:
@@ -400,10 +331,8 @@ class VoiceHandler:
             except Exception as e:
                 logger.error(f"Local TTS fallback error: {e}")
 
-        # Resume voice listening
+        # Mark as finished speaking
         self.sri_is_speaking = False
-        if self.local_voice_listener:
-            self.local_voice_listener.resume_listening()
 
         return success
 

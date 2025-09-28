@@ -106,7 +106,7 @@ class AIAssistant:
 
         return None
 
-    async def process_message(self, message: str, username: str) -> Optional[str]:
+    async def process_message(self, message: str, username: str, force_respond: bool = False) -> Optional[str]:
         try:
             if not self.api_key:
                 return "Kak, aku belum dikonfigurasi dengan benar. Tolong cek API key-ku ya."
@@ -121,8 +121,8 @@ class AIAssistant:
                 self.game_start_time = datetime.now()
                 logger.info(f"Game context updated: {detected_game}")
 
-            # Check if Sri should respond to this message
-            if not self.should_respond(message):
+            # Check if Sri should respond to this message (skip check if force_respond is True)
+            if not force_respond and not self.should_respond(message):
                 # Add to conversation history but don't respond
                 self.conversation_history.append({
                     "timestamp": datetime.now(),

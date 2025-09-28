@@ -45,10 +45,14 @@ class StreamAIBot(commands.Bot):
         try:
             # Cleanup voice handler
             if hasattr(self, 'voice_handler') and self.voice_handler:
-                if hasattr(self.voice_handler, 'local_voice_listener'):
-                    self.voice_handler.local_voice_listener.cleanup()
+                # Cleanup push-to-talk system
+                if hasattr(self.voice_handler, 'push_to_talk') and self.voice_handler.push_to_talk:
+                    try:
+                        self.voice_handler.push_to_talk.stop_listening()
+                    except Exception as ptt_error:
+                        logger.warning(f"Error stopping push-to-talk: {ptt_error}")
 
-                if hasattr(self.voice_handler, 'local_tts'):
+                if hasattr(self.voice_handler, 'local_tts') and self.voice_handler.local_tts:
                     try:
                         self.voice_handler.local_tts.stop()
                     except Exception as tts_error:
@@ -65,10 +69,14 @@ class StreamAIBot(commands.Bot):
         try:
             # Cleanup voice handler
             if hasattr(self, 'voice_handler') and self.voice_handler:
-                if hasattr(self.voice_handler, 'local_voice_listener'):
-                    self.voice_handler.local_voice_listener.cleanup()
+                # Cleanup push-to-talk system
+                if hasattr(self.voice_handler, 'push_to_talk') and self.voice_handler.push_to_talk:
+                    try:
+                        self.voice_handler.push_to_talk.stop_listening()
+                    except Exception as ptt_error:
+                        logger.warning(f"Error stopping push-to-talk: {ptt_error}")
 
-                if hasattr(self.voice_handler, 'local_tts'):
+                if hasattr(self.voice_handler, 'local_tts') and self.voice_handler.local_tts:
                     try:
                         self.voice_handler.local_tts.stop()
                     except Exception as tts_error:
@@ -96,8 +104,8 @@ class StreamAIBot(commands.Bot):
             # Check voice system health
             voice_healthy = True
             if hasattr(self, 'voice_handler') and self.voice_handler:
-                if hasattr(self.voice_handler, 'local_voice_listener'):
-                    voice_healthy = self.voice_handler.local_voice_listener.is_healthy()
+                # Only check push-to-talk system now
+                voice_healthy = self.voice_handler.push_to_talk.is_available()
 
             # Log health status
             uptime_mins = (current_time - self.startup_time) / 60 if self.startup_time else 0
@@ -191,37 +199,37 @@ async def join_voice(ctx):
     if ctx.author.voice:
         channel = ctx.author.voice.channel
 
-        # Start local voice listener first (always works) - store channel context
-        voice_listening_started = bot.voice_handler.local_voice_listener.start_listening()
-
         # Set the channel context for voice responses
         bot.voice_handler.voice_input_channel = ctx.channel
 
-        # Always prioritize voice input working, try voice output as bonus
-        if voice_listening_started:
-            try:
-                # Try to join Discord voice for TTS output (bonus feature)
-                success = await bot.voice_handler.join_channel(channel)
-                if success:
-                    await ctx.send(f"🎉 **PERFECT! Full Voice-to-Voice aktif!** 🎉\n\n🎤 **Voice Input**: Bicara ke microphone komputer\n🔊 **Voice Output**: Sri balas via Discord voice + speaker komputer\n💬 **Text Backup**: Response juga muncul di chat\n\n**Sri siap ngobrol voice-to-voice!**")
-                else:
-                    await ctx.send("🎤 **Voice-to-Voice aktif!** 🎤\n\n🎙️ **Voice Input**: Bicara ke microphone komputer\n🔊 **Voice Output**: Sri balas via speaker komputer\n💬 **Text Chat**: Response juga muncul di chat\n\n**Discord voice gagal, tapi voice conversation tetap jalan!**")
-            except Exception as e:
-                logger.error(f"Voice join error: {e}")
-                await ctx.send("🎤 **Voice Input aktif!** 🎤\n\n• Bicara ke microphone komputer\n• Sri akan balas lewat text chat\n• Voice connection bermasalah, tapi fitur utama tetap jalan!")
-        else:
-            await ctx.send("Maaf Kak, ada masalah dengan microphone. Sri dalam mode text-only ya! 💬")
+        # Start push-to-talk voice input system
+        await bot.voice_handler.start_listening(ctx.channel)
+
+        # Get push-to-talk configuration
+        ptt_config = bot.voice_handler.push_to_talk.get_config_info()
+
+        # Always try voice output as bonus
+        try:
+            # Try to join Discord voice for TTS output (bonus feature)
+            success = await bot.voice_handler.join_channel(channel)
+            if success:
+                await ctx.send(f"🎉 **PERFECT! Push-to-Talk Voice aktif!** 🎉\n\n🎙️ **Mode**: Push-to-Talk Only - Tekan `{ptt_config['talk_key'].upper()}`\n🔊 **Voice Output**: Sri balas via Discord voice + speaker\n💬 **Text Backup**: Response juga muncul di chat\n\n**Sri siap ngobrol!**")
+            else:
+                await ctx.send(f"🎤 **Push-to-Talk aktif!** 🎤\n\n🎙️ **Mode**: Tekan dan tahan `{ptt_config['talk_key'].upper()}`\n🔊 **Voice Output**: Sri balas via speaker komputer\n💬 **Text Chat**: Response juga muncul di chat\n\n**Discord voice gagal, tapi voice conversation tetap jalan!**")
+        except Exception as e:
+            logger.error(f"Voice join error: {e}")
+            await ctx.send(f"🎤 **Push-to-Talk aktif!** 🎤\n\n• Mode: Push-to-Talk Only\n• Sri akan balas lewat text chat\n• Voice connection bermasalah, tapi fitur utama tetap jalan!")
     else:
         # Even without voice channel, can still do voice input → text output
-        voice_listening_started = bot.voice_handler.local_voice_listener.start_listening()
-
         # Set the channel context for voice responses
         bot.voice_handler.voice_input_channel = ctx.channel
 
-        if voice_listening_started:
-            await ctx.send("🎤 **Mode Voice Input aktif!** 🎤\n• Bicara ke microphone komputer\n• Sri akan balas lewat text chat\n• Kak tidak perlu ada di voice channel!")
-        else:
-            await ctx.send("Kak harus masuk voice channel dulu, atau ada masalah dengan microphone!")
+        # Start voice input system
+        await bot.voice_handler.start_listening(ctx.channel)
+
+        # Get push-to-talk configuration
+        ptt_config = bot.voice_handler.push_to_talk.get_config_info()
+        await ctx.send(f"🎤 **Push-to-Talk aktif!** 🎤\n• Tekan dan tahan `{ptt_config['talk_key'].upper()}`\n• Sri akan balas lewat text chat\n• Kak tidak perlu ada di voice channel!")
 
 @bot.command(name='leave')
 async def leave_voice(ctx):
@@ -318,6 +326,90 @@ async def list_voices(ctx):
             await ctx.send("❌ Gagal mendapatkan daftar voice dari ElevenLabs")
     else:
         await ctx.send("⚠ ElevenLabs TTS tidak aktif. Cek ELEVENLABS_API_KEY di .env")
+
+@bot.command(name='voice_mode')
+async def voice_mode_info(ctx):
+    """Show current voice input mode and configuration"""
+
+    embed = discord.Embed(
+        title="🎙️ Voice Input Configuration",
+        color=0x00ff00
+    )
+
+    ptt_config = bot.voice_handler.push_to_talk.get_config_info()
+    embed.add_field(
+        name="🔘 Current Mode",
+        value="**Push-to-Talk**",
+        inline=True
+    )
+    embed.add_field(
+        name="🎯 Talk Key",
+        value=f"`{ptt_config['talk_key']}`",
+        inline=True
+    )
+    embed.add_field(
+        name="📊 Status",
+        value="✅ Active" if ptt_config['is_active'] else "❌ Inactive",
+        inline=True
+    )
+    embed.add_field(
+        name="⚙️ Settings",
+        value=f"Min: {ptt_config['min_duration']}s\nMax: {ptt_config['max_duration']}s",
+        inline=True
+    )
+    embed.add_field(
+        name="📝 How to Use",
+        value=f"1. Tekan dan tahan tombol `{ptt_config['talk_key'].upper()}`\n2. Bicara dengan jelas\n3. Lepas tombol untuk memproses\n4. Sri akan merespons!",
+        inline=False
+    )
+    embed.add_field(
+        name="ℹ️ Info",
+        value="SriAI uses push-to-talk for clear voice communication.",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+@bot.command(name='test_key')
+async def test_push_to_talk_key(ctx):
+    """Test push-to-talk key detection"""
+    if bot.voice_handler.push_to_talk.is_available():
+        ptt_config = bot.voice_handler.push_to_talk.get_config_info()
+
+        embed = discord.Embed(
+            title="🔧 Push-to-Talk Key Test",
+            color=0xff9900,
+            description=f"Testing key: `{ptt_config['talk_key']}`"
+        )
+
+        embed.add_field(
+            name="📝 Instructions",
+            value=f"1. Press and hold `{ptt_config['talk_key'].upper()}` key\n2. Check console/logs for key detection\n3. Release key\n4. Check if recording starts/stops",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔍 Debug Info",
+            value=f"**Current Key**: `{ptt_config['talk_key']}`\n**Status**: {'✅ Active' if ptt_config['is_active'] else '❌ Inactive'}\n**Microphone**: {'✅ Available' if ptt_config['microphone_available'] else '❌ Unavailable'}",
+            inline=False
+        )
+
+        if ptt_config['talk_key'] in ['fn', 'function']:
+            embed.add_field(
+                name="⚠ Key Problem Detected",
+                value="❌ FN key tidak bisa dideteksi!\n💡 Gunakan key lain seperti F1, F2, Space, Ctrl",
+                inline=False
+            )
+
+        embed.add_field(
+            name="🛠 Alternative Keys",
+            value="`F1` `F2` `F3` `F4` `Space` `Ctrl` `Alt` `Tab`",
+            inline=False
+        )
+
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send("❌ Push-to-talk system tidak tersedia")
 
 @bot.command(name='shutdown')
 async def shutdown_bot(ctx):

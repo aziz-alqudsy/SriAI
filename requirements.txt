@@ -31,3 +31,7 @@ pygame>=2.0.0
 
 # Whisper STT (optional alternative)
 openai-whisper>=20231117
+
+# Keyboard Input Handling (for push-to-talk)
+keyboard>=0.13.5
+pynput>=1.7.6

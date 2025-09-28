@@ -64,3 +64,6 @@ tmp/
 
 # Whisper models (cached locally)
 whisper_models/
+
+#testing
+test_*
