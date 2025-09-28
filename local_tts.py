@@ -34,14 +34,15 @@ class LocalTTS:
     def speak(self, text: str):
         """Speak text using Windows PowerShell SAPI (non-blocking)"""
         if not self.available or not text.strip():
-            return
+            return False
 
         if self.is_speaking:
             logger.info("TTS already speaking, queuing not implemented yet")
-            return
+            return False
 
         # Use asyncio to run TTS in background
         asyncio.create_task(self._speak_async(text.strip()))
+        return True  # Return True for successful initiation
 
     async def _speak_async(self, text: str):
         """Async TTS using PowerShell subprocess"""

@@ -14,6 +14,7 @@ import threading
 from queue import Queue
 from local_voice_listener import LocalVoiceListener
 from local_tts import LocalTTS
+from elevenlabs_tts import ElevenLabsTTS
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,19 @@ class VoiceHandler:
         # Store the channel where voice input was activated
         self.voice_input_channel = None
 
-        # Initialize local TTS for computer speakers
+        # Initialize TTS systems (ElevenLabs primary, Local TTS fallback)
+        self.elevenlabs_tts = ElevenLabsTTS()
         self.local_tts = LocalTTS()
+
+        # Set primary TTS based on availability
+        if self.elevenlabs_tts.is_available():
+            self.primary_tts = self.elevenlabs_tts
+            self.fallback_tts = self.local_tts
+            logger.info("🎤 ElevenLabs TTS set as primary, Local TTS as fallback")
+        else:
+            self.primary_tts = self.local_tts
+            self.fallback_tts = None
+            logger.warning("⚠ ElevenLabs not available, using Local TTS only")
 
         # Track recent voice conversation for context awareness
         self.last_voice_interaction_time = 0
@@ -253,25 +265,13 @@ class VoiceHandler:
                 except Exception as e:
                     logger.error(f"Failed to send voice response to Discord: {e}")
 
-                # Use local TTS for computer speakers only (avoid duplication)
+                # Use ElevenLabs TTS with Local TTS fallback
                 try:
-                    if self.local_tts and self.local_tts.is_available():
-                        logger.info(f"Sending to local TTS: {response[:50]}...")
-
-                        # Pause voice listening while Sri is speaking
-                        self.sri_is_speaking = True
-                        if self.local_voice_listener:
-                            self.local_voice_listener.pause_listening()
-
-                        self.local_tts.speak(response)
-                        logger.info("Voice response sent to local TTS queue")
-
-                        # Resume voice listening after a delay (TTS is async)
-                        asyncio.create_task(self._resume_voice_listening_after_speech(response))
-                    else:
-                        logger.warning("Local TTS not available for voice response")
+                    success = await self._speak_with_fallback(response)
+                    if not success:
+                        logger.warning("Both ElevenLabs and Local TTS failed for voice response")
                 except Exception as e:
-                    logger.error(f"Error with local TTS: {e}")
+                    logger.error(f"Error with TTS system: {e}")
 
         except Exception as e:
             logger.error(f"Error processing voice input: {e}")
@@ -336,9 +336,11 @@ class VoiceHandler:
                         response = await self.bot.ai_assistant.process_message(text, user.display_name)
                         if response:  # Sri will only respond if she should
                             logger.info(f"Sri responding: {response}")
-                            # Use local TTS instead of Discord voice to avoid duplication
-                            if self.local_tts and self.local_tts.is_available():
-                                self.local_tts.speak(response)
+                            # Use ElevenLabs TTS with Local TTS fallback
+                            try:
+                                await self._speak_with_fallback(response)
+                            except Exception as tts_error:
+                                logger.error(f"Error with TTS system: {tts_error}")
 
             # Restart recording after processing
             if self.voice_client and self.voice_client.is_connected():
@@ -360,9 +362,57 @@ class VoiceHandler:
             logger.error(f"Transcription error: {e}")
             return ""
 
-    async def _speak(self, text: str):
-        if text and self.voice_client and self.voice_client.is_connected():
-            self.tts_queue.put(text)
+    async def _speak_with_fallback(self, text: str) -> bool:
+        """Speak text using primary TTS (ElevenLabs) with fallback to Local TTS"""
+        logger.info(f"🎤 TTS: {text[:50]}...")
+
+        # Pause voice listening while speaking
+        self.sri_is_speaking = True
+        if self.local_voice_listener:
+            self.local_voice_listener.pause_listening()
+
+        success = False
+
+        # Try primary TTS (ElevenLabs) first
+        try:
+            if hasattr(self.primary_tts, 'speak_async'):
+                success = await self.primary_tts.speak_async(text)
+            else:
+                success = self.primary_tts.speak(text)
+
+            if success:
+                logger.info("✓ ElevenLabs TTS completed successfully")
+            else:
+                logger.warning("⚠ ElevenLabs failed, trying Local TTS fallback")
+
+        except Exception as e:
+            logger.error(f"ElevenLabs TTS error: {e}")
+            success = False  # Ensure success is False when exception occurs
+
+        # Try fallback if primary failed
+        if not success and self.fallback_tts:
+            try:
+                success = self.fallback_tts.speak(text)
+                if success:
+                    logger.info("✓ Local TTS fallback completed")
+                else:
+                    logger.error("✗ Both TTS systems failed")
+            except Exception as e:
+                logger.error(f"Local TTS fallback error: {e}")
+
+        # Resume voice listening
+        self.sri_is_speaking = False
+        if self.local_voice_listener:
+            self.local_voice_listener.resume_listening()
+
+        return success
 
     def speak_text(self, text: str):
-        asyncio.create_task(self._speak(text))
+        """Synchronous wrapper for ElevenLabs TTS with fallback"""
+        try:
+            asyncio.create_task(self._speak_with_fallback(text))
+        except Exception as e:
+            logger.error(f"Error in speak_text: {e}")
+            # Emergency fallback to local TTS
+            if self.local_tts and self.local_tts.is_available():
+                self.local_tts.speak(text)

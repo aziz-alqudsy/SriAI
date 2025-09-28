@@ -163,9 +163,8 @@ class StreamAIBot(commands.Bot):
             # Send text response to chat
             await message.channel.send(response)
 
-            # Use local TTS for voice response to avoid duplication with Discord voice
-            if self.voice_handler.local_tts and self.voice_handler.local_tts.is_available():
-                self.voice_handler.local_tts.speak(response)
+            # Use ElevenLabs TTS with Local TTS fallback for voice response
+            self.voice_handler.speak_text(response)
 
         # Process commands as well
         await self.process_commands(message)
@@ -252,6 +251,73 @@ async def start_stream(ctx):
 async def stop_stream(ctx):
     await bot.stream_manager.stop_streaming()
     await ctx.send("Stream udah distop ya, Kak!")
+
+@bot.command(name='tts_usage')
+async def tts_usage(ctx):
+    """Show ElevenLabs TTS usage information"""
+    if hasattr(bot.voice_handler, 'elevenlabs_tts') and bot.voice_handler.elevenlabs_tts.is_available():
+        usage = bot.voice_handler.elevenlabs_tts.get_usage_info()
+
+        embed = discord.Embed(
+            title="🎤 ElevenLabs TTS Usage",
+            color=0x00ff00,
+            description="Informasi penggunaan TTS hari ini"
+        )
+
+        embed.add_field(name="📊 Karakter Hari Ini", value=f"{usage['daily_used']:,} / {usage['daily_limit']:,}", inline=True)
+        embed.add_field(name="💰 Estimasi Biaya", value=f"${usage['cost_estimate_today']:.4f}", inline=True)
+        embed.add_field(name="📈 Sisa Quota", value=f"{usage['remaining']:,} karakter", inline=True)
+
+        # Add progress bar
+        usage_percent = (usage['daily_used'] / usage['daily_limit']) * 100
+        progress_bar = "█" * int(usage_percent // 5) + "░" * (20 - int(usage_percent // 5))
+        embed.add_field(name="📋 Progress", value=f"`{progress_bar}` {usage_percent:.1f}%", inline=False)
+
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send("⚠ ElevenLabs TTS tidak aktif. Cek ELEVENLABS_API_KEY di .env")
+
+@bot.command(name='voices')
+async def list_voices(ctx):
+    """Show available ElevenLabs voices for user to choose from"""
+    if hasattr(bot.voice_handler, 'elevenlabs_tts') and bot.voice_handler.elevenlabs_tts.is_available():
+        voices = await bot.voice_handler.elevenlabs_tts.get_available_voices_list()
+
+        if voices:
+            embed = discord.Embed(
+                title="🎤 Available ElevenLabs Voices",
+                color=0x00ff00,
+                description="Copy voice ID ke file `.env` sebagai `ELEVENLABS_VOICE_ID=`"
+            )
+
+            # Group voices by category or show top voices
+            top_voices = voices[:10]  # Show first 10 voices
+
+            voice_text = ""
+            for voice in top_voices:
+                voice_text += f"**{voice['name']}**\n"
+                voice_text += f"ID: `{voice['voice_id']}`\n"
+                if voice.get('description'):
+                    voice_text += f"_{voice['description'][:50]}..._\n"
+                voice_text += "\n"
+
+            embed.add_field(name="🔊 Voice Options", value=voice_text, inline=False)
+
+            # Current voice info
+            current_voice = "Auto-selected" if not bot.voice_handler.elevenlabs_tts.user_voice_id else bot.voice_handler.elevenlabs_tts.user_voice_id
+            embed.add_field(name="🎯 Current Voice", value=f"`{current_voice}`", inline=False)
+
+            embed.add_field(
+                name="📝 How to Change Voice",
+                value="1. Copy voice ID yang diinginkan\n2. Tambahkan ke file `.env`: `ELEVENLABS_VOICE_ID=voice_id_here`\n3. Restart bot",
+                inline=False
+            )
+
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("❌ Gagal mendapatkan daftar voice dari ElevenLabs")
+    else:
+        await ctx.send("⚠ ElevenLabs TTS tidak aktif. Cek ELEVENLABS_API_KEY di .env")
 
 @bot.command(name='shutdown')
 async def shutdown_bot(ctx):

@@ -27,6 +27,7 @@ psutil>=5.9.0
 # Audio Processing
 pyaudio>=0.2.11
 ffmpeg-python>=0.2.0
+pygame>=2.0.0
 
 # Whisper STT (optional alternative)
 openai-whisper>=20231117

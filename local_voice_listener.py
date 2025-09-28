@@ -18,6 +18,7 @@ class LocalVoiceListener:
         self.voice_queue = Queue()
         self.last_voice_input = None
         self.last_input_time = 0
+        self.duplicate_lock = threading.Lock()  # Thread-safe duplicate detection
 
         # Initialize microphone with enhanced settings
         try:
@@ -50,6 +51,12 @@ class LocalVoiceListener:
             logger.error("Microphone not available")
             return False
 
+        # Ensure any existing thread is properly stopped before starting new one
+        if self.listen_thread and self.listen_thread.is_alive():
+            logger.info("Stopping existing listening thread before starting new one")
+            self.is_listening = False
+            self.listen_thread.join(timeout=3)
+
         if self.is_listening:
             logger.info("Already listening")
             return True
@@ -63,8 +70,11 @@ class LocalVoiceListener:
     def pause_listening(self):
         """Pause voice listening temporarily"""
         self.is_listening = False
-        if self.listen_thread:
-            self.listen_thread.join(timeout=1)
+        if self.listen_thread and self.listen_thread.is_alive():
+            # Give the thread more time to finish cleanly
+            self.listen_thread.join(timeout=3)
+            if self.listen_thread.is_alive():
+                logger.warning("Voice listening thread did not stop cleanly")
         logger.info("Paused local voice listening")
 
     def resume_listening(self):
@@ -72,6 +82,14 @@ class LocalVoiceListener:
         if not self.microphone:
             logger.error("Microphone not available")
             return False
+
+        # Ensure old thread is completely stopped before creating new one
+        if self.listen_thread and self.listen_thread.is_alive():
+            logger.info("Waiting for previous listening thread to finish...")
+            self.is_listening = False
+            self.listen_thread.join(timeout=3)
+            if self.listen_thread.is_alive():
+                logger.warning("Previous thread still alive, may cause duplicate processing")
 
         if self.is_listening:
             logger.info("Already listening")
@@ -127,15 +145,18 @@ class LocalVoiceListener:
                         # Check for duplicate input
                         import time
                         current_time = time.time()
-                        if (enhanced_text != self.last_voice_input or
-                            current_time - self.last_input_time > 3):  # 3 second timeout to prevent echo/rapid duplicates
-                            # Put the enhanced text in queue
-                            self.voice_queue.put(enhanced_text)
-                            self.last_voice_input = enhanced_text
-                            self.last_input_time = current_time
-                            logger.info(f"Added voice input to queue: {enhanced_text}")
-                        else:
-                            logger.info(f"Skipping duplicate/rapid voice input: {enhanced_text}")
+
+                        # Thread-safe duplicate detection
+                        with self.duplicate_lock:
+                            if (enhanced_text != self.last_voice_input or
+                                current_time - self.last_input_time > 3):  # 3 second timeout to prevent echo/rapid duplicates
+                                # Put the enhanced text in queue
+                                self.voice_queue.put(enhanced_text)
+                                self.last_voice_input = enhanced_text
+                                self.last_input_time = current_time
+                                logger.info(f"Added voice input to queue: {enhanced_text} (Thread {thread_id})")
+                            else:
+                                logger.info(f"Skipping duplicate/rapid voice input: {enhanced_text} (Thread {thread_id})")
 
                 except sr.WaitTimeoutError:
                     # Timeout is normal, continue listening
