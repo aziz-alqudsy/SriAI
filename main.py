@@ -1,16 +1,22 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
 import os
 from dotenv import load_dotenv
 import logging
+import signal
+import sys
 from ai_assistant import AIAssistant
 from voice_handler import VoiceHandler
 from stream_manager import StreamManager
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - [%(threadName)s] - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 intents = discord.Intents.default()
@@ -29,9 +35,103 @@ class StreamAIBot(commands.Bot):
         self.recent_voice_responses = []
         self.voice_response_timeout = 5  # seconds
 
+        # Health monitoring
+        self.startup_time = None
+        self.last_health_check = None
+
+    def cleanup_resources(self):
+        """Clean up all bot resources (sync version for signal handlers)"""
+        logger.info("Starting bot resource cleanup...")
+        try:
+            # Cleanup voice handler
+            if hasattr(self, 'voice_handler') and self.voice_handler:
+                if hasattr(self.voice_handler, 'local_voice_listener'):
+                    self.voice_handler.local_voice_listener.cleanup()
+
+                if hasattr(self.voice_handler, 'local_tts'):
+                    try:
+                        self.voice_handler.local_tts.stop()
+                    except Exception as tts_error:
+                        logger.warning(f"Error stopping TTS: {tts_error}")
+
+            # Stream manager cleanup is handled elsewhere to avoid async issues
+            logger.info("Bot resource cleanup completed")
+        except Exception as cleanup_error:
+            logger.error(f"Error during bot cleanup: {cleanup_error}")
+
+    async def async_cleanup_resources(self):
+        """Clean up all bot resources (async version for proper shutdown)"""
+        logger.info("Starting async bot resource cleanup...")
+        try:
+            # Cleanup voice handler
+            if hasattr(self, 'voice_handler') and self.voice_handler:
+                if hasattr(self.voice_handler, 'local_voice_listener'):
+                    self.voice_handler.local_voice_listener.cleanup()
+
+                if hasattr(self.voice_handler, 'local_tts'):
+                    try:
+                        self.voice_handler.local_tts.stop()
+                    except Exception as tts_error:
+                        logger.warning(f"Error stopping TTS: {tts_error}")
+
+            # Cleanup stream manager properly with async
+            if hasattr(self, 'stream_manager') and self.stream_manager:
+                try:
+                    await self.stream_manager.stop_streaming()
+                    logger.info("Stream manager stopped successfully")
+                except Exception as stream_error:
+                    logger.warning(f"Error stopping stream: {stream_error}")
+
+            logger.info("Async bot resource cleanup completed")
+        except Exception as cleanup_error:
+            logger.error(f"Error during async bot cleanup: {cleanup_error}")
+
+    @tasks.loop(minutes=5)
+    async def health_monitor(self):
+        """Monitor bot health and log status"""
+        try:
+            import time
+            current_time = time.time()
+
+            # Check voice system health
+            voice_healthy = True
+            if hasattr(self, 'voice_handler') and self.voice_handler:
+                if hasattr(self.voice_handler, 'local_voice_listener'):
+                    voice_healthy = self.voice_handler.local_voice_listener.is_healthy()
+
+            # Log health status
+            uptime_mins = (current_time - self.startup_time) / 60 if self.startup_time else 0
+            logger.info(f"Health Check - Uptime: {uptime_mins:.1f}m, Voice: {'✓' if voice_healthy else '✗'}, Guilds: {len(self.guilds)}")
+
+            # Check memory usage
+            try:
+                import psutil
+                process = psutil.Process()
+                memory_mb = process.memory_info().rss / 1024 / 1024
+                if memory_mb > 500:  # Alert if over 500MB
+                    logger.warning(f"High memory usage detected: {memory_mb:.1f} MB")
+            except Exception:
+                pass
+
+            self.last_health_check = current_time
+
+        except Exception as health_error:
+            logger.error(f"Health monitor error: {health_error}")
+
+    @health_monitor.before_loop
+    async def before_health_monitor(self):
+        await self.wait_until_ready()
+
     async def on_ready(self):
+        import time
+        self.startup_time = time.time()
         logger.info(f'{self.user} has connected to Discord!')
         logger.info(f'Sri is in {len(self.guilds)} guilds')
+
+        # Start health monitoring
+        if not self.health_monitor.is_running():
+            self.health_monitor.start()
+            logger.info("Health monitoring started")
 
     async def on_message(self, message):
         # Don't respond to bot's own messages
@@ -158,19 +258,12 @@ async def shutdown_bot(ctx):
     # Send goodbye message
     await ctx.send("👋 **Dadah Kak! Sri mau istirahat dulu...**\n\n🔇 Stopping all voice functions...\n📞 Disconnecting from voice...\n🛑 Shutting down bot...")
 
-    # Stop all voice functions
-    await bot.voice_handler.stop_listening()
+    # Use proper async cleanup
+    await bot.async_cleanup_resources()
 
     # Disconnect from voice if connected
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-
-    # Stop local TTS if available
-    if hasattr(bot.voice_handler, 'local_tts') and bot.voice_handler.local_tts:
-        try:
-            bot.voice_handler.local_tts.stop()
-        except:
-            pass
 
     # Close bot connection
     await bot.close()
@@ -180,7 +273,17 @@ async def shutdown_bot(ctx):
     import sys
     sys.exit(0)
 
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    bot.cleanup_resources()
+    sys.exit(0)
+
 if __name__ == "__main__":
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     token = os.getenv('DISCORD_TOKEN')
     if not token:
         logger.error("DISCORD_TOKEN not found in environment variables!")
@@ -188,4 +291,44 @@ if __name__ == "__main__":
         exit(1)
 
     logger.info("Starting SriAI bot...")
-    bot.run(token)
+    logger.info(f"Process ID: {os.getpid()}")
+
+    try:
+        bot.run(token)
+    except KeyboardInterrupt:
+        logger.info("Bot shutdown requested by user (Ctrl+C)")
+    except discord.LoginFailure:
+        logger.error("Failed to login - invalid Discord token")
+    except discord.ConnectionClosed:
+        logger.error("Discord connection closed unexpectedly")
+    except Exception as e:
+        logger.error(f"CRITICAL: Bot crashed with unexpected error: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
+        # Log system state for debugging
+        try:
+            import psutil
+            process = psutil.Process()
+            logger.error(f"Memory usage: {process.memory_info().rss / 1024 / 1024:.1f} MB")
+            logger.error(f"CPU usage: {process.cpu_percent():.1f}%")
+            logger.error(f"Thread count: {process.num_threads()}")
+            logger.error(f"Open files: {len(process.open_files())}")
+        except Exception as debug_error:
+            logger.error(f"Could not gather system info: {debug_error}")
+
+        # Force cleanup on crash
+        try:
+            bot.cleanup_resources()
+        except Exception as cleanup_error:
+            logger.error(f"Error during emergency cleanup: {cleanup_error}")
+
+        raise  # Re-raise for proper exit code
+    finally:
+        try:
+            bot.cleanup_resources()
+        except Exception as final_cleanup_error:
+            logger.error(f"Error during final cleanup: {final_cleanup_error}")
+
+        logger.info("Bot shutdown complete")

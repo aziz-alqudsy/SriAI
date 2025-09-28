@@ -1,4 +1,4 @@
-import google.generativeai as genai
+import openai
 import os
 import logging
 from datetime import datetime
@@ -8,44 +8,41 @@ logger = logging.getLogger(__name__)
 
 class AIAssistant:
     def __init__(self):
-        self.api_key = os.getenv('GEMINI_API_KEY')
+        self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
-            logger.error("GEMINI_API_KEY not found in environment variables!")
+            logger.error("OPENAI_API_KEY not found in environment variables!")
             return
 
-        genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        # Initialize OpenAI client
+        openai.api_key = self.api_key
+        self.client = openai.OpenAI(api_key=self.api_key)
+
+        # Model configuration
+        self.model = "gpt-3.5-turbo"  # Fast and cost-effective
+        self.generation_config = {
+            "temperature": 0.7,
+            "max_tokens": 300,
+            "top_p": 0.9,
+        }
 
         # Track current game context
         self.current_game = None
         self.game_start_time = None
 
         self.system_prompt = """
-        Kamu adalah Sri, adik perempuan AI yang manis dan ceria yang membantu dengan streaming YouTube. Kamu berkomunikasi melalui voice chat Discord.
+        Kamu adalah Sri, AI assistant yang membantu dengan streaming. Kamu ramah dan ceria.
 
-        Kepribadianmu:
-        - Kamu seperti adik perempuan yang penyayang - main-main, mendukung, dan penuh kasih
-        - Kamu memanggil kakak laki-lakimu dengan aturan khusus panggilan
-        - Kamu merespons ketika dipanggil "Sri" atau ketika langsung ditanya
-        - Kamu antusias membantu streaming dan menghibur penonton
-        - Kamu berbicara dengan ramah dan kasual dalam Bahasa Indonesia
-        - Kamu berpengetahuan tentang gaming, teknologi, dan peristiwa terkini
-        - Kamu suka berinteraksi dengan penonton stream dan membuat mereka tertawa
+        Perilaku:
+        - Merespons ketika dipanggil "Sri"
+        - Gunakan panggilan "Kak" untuk menyapa dan "Kakak" dalam kalimat
+        - Berbicara dalam Bahasa Indonesia
+        - Respons singkat dan natural
+        - Antusias tentang gaming dan streaming
 
-        Perilakumu:
-        - Hanya merespons ketika seseorang bilang "Sri" atau langsung bertanya kepadamu
-        - Gunakan aturan panggilan khusus untuk kakak laki-lakimu
-        - Bersikap mendorong dan mendukung seperti adik perempuan yang baik
-        - Jaga respons tetap conversational dan di bawah 30 detik bicara
-        - Tunjukkan kegembiraan tentang aktivitas streaming dan game
-        - Bantu dengan masalah teknis tapi dengan cara yang lucu dan antusias
-
-        Panduan:
-        - Tunggu dipanggil "Sri" sebelum merespons (kecuali jelas ditujukan kepadamu)
-        - ATURAN PANGGILAN: Gunakan "Kakak" ketika menyebut di awal kalimat atau sebagai subjek (contoh: "Kakak bisa coba ini", "Kakak lagi ngapain?"). Gunakan "Kak" untuk menyapa atau memanggil (contoh: "Halo Kak!", "Iya Kak")
-        - Bersikap alami dan tunjukkan kepribadian ceriamu
-        - Bantu dengan manajemen stream dengan cara antusiasmu sendiri
-        - SELALU berbicara dalam Bahasa Indonesia saja
+        Contoh respons:
+        - Untuk sapaan: "Halo Kak! Sri siap bantu streaming hari ini!"
+        - Untuk game: "Wah seru nih! Sri suka nonton Kakak main!"
+        - Untuk teknis: "Sri coba bantuin ya, Kak!"
         """
 
         self.conversation_history = []
@@ -162,19 +159,48 @@ class AIAssistant:
             if self.current_game:
                 game_context = f"\n\nKONTEKS GAME SAAT INI: {user_title} sedang main {self.current_game}. Sri tahu tentang game ini dan bisa ngobrol tentang game ini dengan antusias."
 
-            full_prompt = f"{self.system_prompt}\n\nPercakapan terakhir:\n{context}{game_context}\n\nOrang yang bicara adalah {user_title}. Respons sebagai Sri untuk: {message}"
+            # Prepare messages for OpenAI Chat API
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": f"Percakapan terakhir:\n{context}{game_context}\n\nOrang yang bicara adalah {user_title}. Respons sebagai Sri untuk: {message}"}
+            ]
 
-            # Generate response
-            response = self.model.generate_content(full_prompt)
+            # Generate response using OpenAI
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    **self.generation_config
+                )
 
-            if response and response.text:
-                return response.text.strip()
-            else:
-                return "Kak, aku agak susah ngerti nih. Bisa diulangi lagi?"
+                if response.choices and response.choices[0].message.content:
+                    return response.choices[0].message.content.strip()
+                else:
+                    logger.warning("OpenAI returned empty response")
+                    return self._get_fallback_response(message)
+
+            except Exception as openai_error:
+                logger.error(f"OpenAI API error: {openai_error}")
+                return self._get_fallback_response(message)
 
         except Exception as e:
             logger.error(f"AI processing error: {e}")
-            return "Kak, aku lagi ada masalah teknis nih."
+            return self._get_fallback_response(message)
+
+    def _get_fallback_response(self, message: str) -> str:
+        """Get appropriate fallback response based on message type"""
+        message_lower = message.lower()
+
+        if any(word in message_lower for word in ['halo', 'selamat', 'hai', 'hello']):
+            return "Halo Kak! Sri siap bantuin streaming hari ini!"
+        elif any(word in message_lower for word in ['bye', 'udahan', 'selesai']):
+            return "Dadah Kak! Terima kasih buat streaming hari ini! Sampai jumpa lagi ya!"
+        elif 'siap' in message_lower and 'sri' in message_lower:
+            return "Siap banget, Kak! Sri udah excited nih buat bantuin streaming!"
+        elif any(word in message_lower for word in ['game', 'main']):
+            return "Wah seru nih! Sri suka nonton Kakak main game!"
+        else:
+            return "Iya Kak! Sri di sini siap bantuin!"
 
     def is_main_user(self, username: str) -> bool:
         """Check if this is the main user (big brother)"""

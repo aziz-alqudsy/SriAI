@@ -34,7 +34,7 @@ class LocalVoiceListener:
             # Enhanced recognizer settings for better accuracy
             self.recognizer.energy_threshold = 300  # Higher threshold to avoid picking up TTS echo
             self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.pause_threshold = 10  # Longer pause to capture full sentences
+            self.recognizer.pause_threshold = 5  # Longer pause to capture full sentences
             self.recognizer.operation_timeout = None  # No operation timeout
 
             logger.info(f"Microphone energy threshold: {self.recognizer.energy_threshold}")
@@ -90,17 +90,21 @@ class LocalVoiceListener:
         logger.info("Stopped local voice listening")
 
     def _listen_loop(self):
-        logger.info("Voice listening loop started")
-        while self.is_listening:
-            try:
-                with self.microphone as source:
-                    # Listen for audio with timeout - longer phrase limit for full sentences
-                    audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=10)
+        thread_id = threading.get_ident()
+        logger.info(f"Voice listening loop started (Thread ID: {thread_id})")
 
-                logger.info("Audio detected, processing voice input...")
-                # Try to recognize speech using Google's free service
+        try:
+            while self.is_listening:
                 try:
-                    # Try multiple language settings for better recognition
+                    # Use a fresh microphone instance to avoid context manager conflicts
+                    mic = sr.Microphone()
+                    with mic as source:
+                        # Listen for audio with timeout - longer phrase limit for full sentences
+                        audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=10)
+
+                    logger.info("Audio detected, processing voice input...")
+
+                    # Try to recognize speech using Google's free service
                     text = None
                     languages = ['id-ID', 'id', 'en-US']  # Indonesian variants + English fallback
 
@@ -132,24 +136,65 @@ class LocalVoiceListener:
                             logger.info(f"Added voice input to queue: {enhanced_text}")
                         else:
                             logger.info(f"Skipping duplicate/rapid voice input: {enhanced_text}")
+
+                except sr.WaitTimeoutError:
+                    # Timeout is normal, continue listening
+                    continue
                 except sr.UnknownValueError:
                     # Speech was unintelligible
                     logger.debug("Could not understand audio")
                 except sr.RequestError as e:
                     logger.error(f"Could not request results from speech service: {e}")
                     time.sleep(1)  # Wait before retrying
+                except Exception as listen_error:
+                    logger.error(f"Error in voice listening cycle (Thread {thread_id}): {listen_error}")
+                    logger.error(f"Error type: {type(listen_error).__name__}")
 
-            except sr.WaitTimeoutError:
-                # Timeout is normal, continue listening
-                continue
-            except Exception as e:
-                logger.error(f"Error in voice listening loop: {e}")
-                time.sleep(1)  # Wait before retrying
+                    # Check if it's a critical error
+                    if isinstance(listen_error, (OSError, RuntimeError)):
+                        logger.error("Critical audio system error detected")
+                        self.is_listening = False
+                        break
 
-        logger.info("Voice listening loop ended")
+                    time.sleep(1)  # Wait before retrying
+
+        except Exception as thread_error:
+            logger.error(f"CRITICAL: Voice listening thread crashed (Thread {thread_id}): {thread_error}")
+            logger.error(f"Thread error type: {type(thread_error).__name__}")
+            import traceback
+            logger.error(f"Thread traceback:\n{traceback.format_exc()}")
+
+        finally:
+            # Cleanup resources
+            try:
+                if hasattr(self, 'microphone') and self.microphone:
+                    # Ensure microphone is properly cleaned up
+                    if hasattr(self.microphone, 'stream') and self.microphone.stream:
+                        self.microphone.stream.close()
+            except Exception as cleanup_error:
+                logger.warning(f"Error during microphone cleanup: {cleanup_error}")
+
+            logger.info(f"Voice listening loop ended (Thread {thread_id})")
 
     def is_available(self):
         return self.microphone is not None
+
+    def is_healthy(self):
+        """Check if voice listener is in a healthy state"""
+        try:
+            if not self.is_available():
+                return False
+
+            # Check if listening thread is alive when it should be
+            if self.is_listening:
+                if not self.listen_thread or not self.listen_thread.is_alive():
+                    logger.warning("Voice listening thread should be running but isn't")
+                    return False
+
+            return True
+        except Exception as health_error:
+            logger.error(f"Error checking voice listener health: {health_error}")
+            return False
 
     def get_voice_input(self):
         """Get recognized voice input from queue"""
@@ -157,6 +202,32 @@ class LocalVoiceListener:
             return self.voice_queue.get_nowait()
         except:
             return None
+
+    def cleanup(self):
+        """Clean up all resources"""
+        logger.info("Cleaning up voice listener resources...")
+        try:
+            # Stop listening
+            self.stop_listening()
+
+            # Clean up microphone
+            if hasattr(self, 'microphone') and self.microphone:
+                try:
+                    if hasattr(self.microphone, 'stream') and self.microphone.stream:
+                        self.microphone.stream.close()
+                except Exception as mic_cleanup_error:
+                    logger.warning(f"Error cleaning up microphone: {mic_cleanup_error}")
+
+            # Clear queue
+            while not self.voice_queue.empty():
+                try:
+                    self.voice_queue.get_nowait()
+                except:
+                    break
+
+            logger.info("Voice listener cleanup completed")
+        except Exception as cleanup_error:
+            logger.error(f"Error during voice listener cleanup: {cleanup_error}")
 
     def _enhance_speech_text(self, text: str) -> str:
         """Enhanced speech text with Sri name detection and common fixes"""

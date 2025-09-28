@@ -1,9 +1,32 @@
+# SriAI Discord Bot Requirements
+# Install semua dependency dengan: pip install -r requirements.txt
+
+# Core Discord & Bot
 discord.py[voice]>=2.3.2
-openai-whisper>=20231117
-pyttsx3>=2.90
-PyNaCl>=1.5.0
-ffmpeg-python>=0.2.0
-google-generativeai>=0.3.0
 python-dotenv>=1.0.0
-asyncio>=3.4.3
 aiohttp>=3.9.0
+PyNaCl>=1.5.0
+
+# AI Assistant - OpenAI (Recommended)
+openai>=1.0.0
+
+# AI Assistant - Gemini (Alternative, free but has safety filters)
+google-generativeai>=0.3.0
+
+# Voice Recognition & TTS
+SpeechRecognition>=3.10.0
+pyttsx3>=2.90
+comtypes>=1.1.14
+
+# ElevenLabs TTS (optional, requires API key)
+elevenlabs>=0.2.0
+
+# System Monitoring & Crash Recovery
+psutil>=5.9.0
+
+# Audio Processing
+pyaudio>=0.2.11
+ffmpeg-python>=0.2.0
+
+# Whisper STT (optional alternative)
+openai-whisper>=20231117
